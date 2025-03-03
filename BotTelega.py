@@ -12,9 +12,9 @@ from telegram.ext import (
     CallbackQueryHandler
 )
 
-from con_db import DatabaseManager
-from s_movies import FilmSearch
-from s_history import SearchHistory
+from connection_db import DatabaseManager
+from search_film import FilmSearch
+from search_history import SearchHistory
 
 load_dotenv()
 
