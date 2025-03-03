@@ -1,30 +1,28 @@
 import os
 import logging
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup,CallbackQuery
 from telegram.ext import (
     ApplicationBuilder,
     filters,
     CommandHandler,
     MessageHandler,
     ContextTypes,
-    ConversationHandler
+    ConversationHandler,
+    CallbackQueryHandler
 )
 
 from con_db import DatabaseManager
 from s_movies import FilmSearch
 from s_history import SearchHistory
 
-
 load_dotenv()
-
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 READ_HOST = os.getenv("READ_HOST")
 READ_USER = os.getenv("READ_USER")
 READ_PASSWORD = os.getenv("READ_PASSWORD")
 READ_DATABASE = os.getenv("READ_DATABASE")
-
 
 db_manager = DatabaseManager(
     host=READ_HOST,
@@ -35,26 +33,33 @@ db_manager = DatabaseManager(
 film_search = FilmSearch(db_manager)
 history = SearchHistory()
 
-
 SEARCH_KEYWORD, SEARCH_GENRE_YEAR = range(2)
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def get_back_to_menu_keyboard():
+    keyboard = [
+
+        [InlineKeyboardButton("Доступные команды", callback_data='commands')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /start")
     await update.message.reply_text(
-        "Добро пожаловать в бота для поиска фильмов!\n"
+   "Добро пожаловать в бота для поиска фильмов!\n"
         "Доступные команды:\n"
         "/search_keyword – поиск по ключевому слову\n"
         "/search_genre_year – поиск по жанру и году\n"
         "/popular – вывод популярных запросов\n"
-        "/cancel – отмена текущей операции"
+        "/exit – выход из приложения",
+        reply_markup=get_back_to_menu_keyboard()
     )
 
 async def search_keyword_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /search_keyword")
-    await update.message.reply_text("Введите ключевое слово для поиска фильмов:")
+    await update.message.reply_text("Введите ключевое слово для поиска фильмов:", reply_markup=get_back_to_menu_keyboard())
     return SEARCH_KEYWORD
 
 async def search_keyword(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -66,12 +71,12 @@ async def search_keyword(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = "\n".join([f"{film['title']} ({film['release_year']})" for film in results])
     else:
         response = "Фильмы не найдены."
-    await update.message.reply_text(response)
+    await update.message.reply_text(response, reply_markup=get_back_to_menu_keyboard())
     return ConversationHandler.END
 
 async def search_genre_year_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /search_genre_year")
-    await update.message.reply_text("Введите жанр и год через запятую (например, Action, 2006):")
+    await update.message.reply_text("Введите жанр и год через запятую (например, Drama, 1998):", reply_markup=get_back_to_menu_keyboard())
     return SEARCH_GENRE_YEAR
 
 async def search_genre_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -81,7 +86,7 @@ async def search_genre_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Поиск по жанру: {genre}, год: {year}")
     except Exception as e:
         logger.error(f"Ошибка при разборе жанра и года: {e}")
-        await update.message.reply_text("Неверный формат. Пожалуйста, используйте формат: Жанр, Год")
+        await update.message.reply_text("Неверный формат. Пожалуйста, используйте формат: Жанр, Год", reply_markup=get_back_to_menu_keyboard())
         return SEARCH_GENRE_YEAR
 
     history.save_query(f"genre: {genre}, year: {year}")
@@ -90,7 +95,7 @@ async def search_genre_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = "\n".join([f"{film['title']} ({film['release_year']}), жанр: {film['category']}" for film in results])
     else:
         response = "Фильмы не найдены."
-    await update.message.reply_text(response)
+    await update.message.reply_text(response, reply_markup=get_back_to_menu_keyboard())
     return ConversationHandler.END
 
 async def popular_queries(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -100,16 +105,33 @@ async def popular_queries(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = "\n".join([f"{row[0]} – {row[1]} раз(а)" for row in popular])
     else:
         response = "История запросов пуста."
-    await update.message.reply_text(response)
+    await update.message.reply_text(response, reply_markup=get_back_to_menu_keyboard())
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Получена команда /cancel")
-    await update.message.reply_text("Операция отменена.")
+    logger.info("Получена команда /exit")
+    await update.message.reply_text("Выход из приложения.", reply_markup=get_back_to_menu_keyboard())
     return ConversationHandler.END
+
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == 'menu':
+        await start(update, context)
+    elif query.data == 'commands':
+        await commands_list(update, context, query)
+
+async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE, query: CallbackQuery):
+    await query.edit_message_text(
+        "Доступные команды:\n"
+        "/search_keyword – поиск по ключевому слову\n"
+        "/search_genre_year – поиск по жанру и году\n"
+        "/popular – вывод популярных запросов\n"
+        "/exit – выход из приложения",
+        reply_markup=get_back_to_menu_keyboard()
+    )
 
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-
 
     conv_handler_keyword = ConversationHandler(
         entry_points=[CommandHandler('search_keyword', search_keyword_command)],
@@ -127,12 +149,12 @@ def main():
         fallbacks=[CommandHandler('cancel', cancel)]
     )
 
-
     application.add_handler(CommandHandler("start", start))
     application.add_handler(conv_handler_keyword)
     application.add_handler(conv_handler_genre_year)
     application.add_handler(CommandHandler("popular", popular_queries))
     application.add_handler(CommandHandler("cancel", cancel))
+    application.add_handler(CallbackQueryHandler(button))
 
     application.run_polling()
 
