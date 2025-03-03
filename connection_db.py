@@ -12,7 +12,8 @@ class DatabaseManager:
                 cursorclass=pymysql.cursors.DictCursor
             )
            self.cursor = self.connection.cursor()
-           print("Подключение к базе ОК")
+           print("Подключение к базе!" )
+           print("Добро пожаловать в бота для поиска фильмов!")
         except pymysql.MySQLError as e:
             print("Ошибка подключения",e)
             raise
